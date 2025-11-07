@@ -12,6 +12,23 @@
 
 static inline QString qstr(const char *c) { return c ? QString::fromUtf8(c) : QString(); }
 
+// Helper: check if a profile exists by name
+static bool profileExists(const QString &name)
+{
+	char **profiles = obs_frontend_get_profiles();
+	if (!profiles)
+		return false;
+	bool found = false;
+	for (char **p = profiles; *p; ++p) {
+		if (name == qstr(*p)) {
+			found = true;
+			break;
+		}
+	}
+	bfree(profiles);
+	return found;
+}
+
 ProfileDockWidget::ProfileDockWidget(QWidget *parent) : QWidget(parent)
 {
 	auto *root = new QVBoxLayout(this);
@@ -139,7 +156,7 @@ void ProfileDockWidget::refreshProfiles()
 
 void ProfileDockWidget::onSwitch()
 {
-	auto name = selectedProfile();
+	const auto name = selectedProfile();
 	if (name.isEmpty()) return;
 	obs_frontend_set_current_profile(name.toUtf8().constData());
 }
@@ -149,8 +166,12 @@ void ProfileDockWidget::onCreate()
 	const auto name = editNewName->text().trimmed();
 	if (name.isEmpty()) return;
 
-	if (!obs_frontend_create_profile(name.toUtf8().constData())) {
-		QMessageBox::warning(this, tr("Create Profile"), tr("Failed to create profile (name may already exist)."));
+	// Create profile (void return); then verify it exists.
+	obs_frontend_create_profile(name.toUtf8().constData());
+
+	if (!profileExists(name)) {
+		QMessageBox::warning(this, tr("Create Profile"),
+		                     tr("Failed to create profile (it may already exist or name is invalid)."));
 		return;
 	}
 	obs_frontend_set_current_profile(name.toUtf8().constData());
@@ -164,7 +185,9 @@ void ProfileDockWidget::onDuplicate()
 	if (base.isEmpty() || copyName.isEmpty()) return;
 
 	obs_frontend_set_current_profile(base.toUtf8().constData());
-	if (!obs_frontend_duplicate_profile(copyName.toUtf8().constData())) {
+	obs_frontend_duplicate_profile(copyName.toUtf8().constData());
+
+	if (!profileExists(copyName)) {
 		QMessageBox::warning(this, tr("Duplicate Profile"), tr("Failed to duplicate profile."));
 		return;
 	}
@@ -179,10 +202,13 @@ void ProfileDockWidget::onRename()
 
 	if (!confirmDanger(tr("Rename Profile"),
 	                   tr("This will duplicate '%1' to '%2' and then delete '%1'. Continue?")
-	                   .arg(src, dst))) return;
+	                     .arg(src, dst)))
+		return;
 
 	obs_frontend_set_current_profile(src.toUtf8().constData());
-	if (!obs_frontend_duplicate_profile(dst.toUtf8().constData())) {
+	obs_frontend_duplicate_profile(dst.toUtf8().constData());
+
+	if (!profileExists(dst)) {
 		QMessageBox::warning(this, tr("Rename Profile"), tr("Duplicate step failed."));
 		return;
 	}
