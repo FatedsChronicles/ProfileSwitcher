@@ -32,24 +32,60 @@ jobs:
       - name: Build via template script
         run: .github/scripts/build-macos
 
-      - name: Install (ensure rundir exists)
+      - name: Install (if template uses install to stage outputs)
         run: |
           if [ -d build_macos ]; then cmake --install build_macos --config RelWithDebInfo || true; fi
 
-      - name: List outputs
+      - name: Locate built plugin (.so/.plugin)
+        id: findmac
         run: |
-          echo "==== build_macos tree ===="
-          (command -v tree >/dev/null || brew install tree) && tree -a build_macos || find build_macos -maxdepth 4 -type f | sort
+          set -e
+          # Try .so first (common for OBS plugins on macOS)
+          SO=$(find build_macos -type f -name 'profile-switcher*.so' | head -n1 || true)
+          if [ -n "$SO" ]; then
+            echo "KIND=so" >> $GITHUB_OUTPUT
+            echo "FILE=$SO" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          # Fallback: bundle (.plugin) or dylib
+          PLUG=$(find build_macos -type d -name 'profile-switcher*.plugin' | head -n1 || true)
+          if [ -n "$PLUG" ]; then
+            echo "KIND=plugin" >> $GITHUB_OUTPUT
+            echo "FILE=$PLUG" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          DY=$(find build_macos -type f -name 'profile-switcher*.dylib' | head -n1 || true)
+          if [ -n "$DY" ]; then
+            echo "KIND=dylib" >> $GITHUB_OUTPUT
+            echo "FILE=$DY" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo "No macOS plugin artifact found"; exit 1
 
-      - name: Upload plugin folders (preferred)
+      - name: Package OBS layout
+        run: |
+          set -e
+          DIST=dist/profile-switcher-macos
+          mkdir -p "$DIST/obs-plugins" "$DIST/data/obs-plugins/profile-switcher/locale"
+          if [ "${{ steps.findmac.outputs.KIND }}" = "so" ] || [ "${{ steps.findmac.outputs.KIND }}" = "dylib" ]; then
+            cp "${{ steps.findmac.outputs.FILE }}" "$DIST/obs-plugins/profile-switcher.so"
+          else
+            # bundle: copy whole plugin bundle
+            cp -R "${{ steps.findmac.outputs.FILE }}" "$DIST/obs-plugins/"
+          fi
+          if [ -f data/locale/en-US.ini ]; then
+            cp data/locale/en-US.ini "$DIST/data/obs-plugins/profile-switcher/locale/en-US.ini"
+          fi
+          (cd dist && zip -r ../profile-switcher-macos.zip profile-switcher-macos)
+          ls -R dist || true
+
+      - name: Upload plugin ZIP (ready to copy into OBS)
         uses: actions/upload-artifact@v4
         with:
-          name: profile-switcher-macos
-          path: |
-            build_macos/**/rundir/**/obs-plugins/**
-            build_macos/**/rundir/**/data/obs-plugins/**
+          name: profile-switcher-macos-zip
+          path: profile-switcher-macos.zip
 
-      - name: Upload fallback (entire build dir)
+      - name: Upload builddir (fallback)
         if: always()
         uses: actions/upload-artifact@v4
         with:

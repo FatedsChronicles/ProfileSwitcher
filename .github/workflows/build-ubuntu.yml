@@ -15,7 +15,7 @@ jobs:
       - name: Install zsh (template script uses zsh)
         run: |
           sudo apt-get update
-          sudo apt-get install -y zsh
+          sudo apt-get install -y zsh zip
 
       - name: Patch CMakePresets.json (enable frontend + Qt)
         run: |
@@ -37,24 +37,41 @@ jobs:
       - name: Build via template script
         run: .github/scripts/build-ubuntu
 
-      - name: Install (ensure rundir exists)
+      - name: Install (if template uses install to stage outputs)
         run: |
           if [ -d build_x86_64 ]; then cmake --install build_x86_64 --config RelWithDebInfo || true; fi
 
-      - name: List outputs
+      - name: Locate built plugin (.so)
+        id: findso
         run: |
-          echo "==== build_x86_64 tree ===="
-          (command -v tree >/dev/null || sudo apt-get install -y tree) && tree -a build_x86_64 || find build_x86_64 -maxdepth 4 -type f | sort
+          set -e
+          SO=$(find build_x86_64 -type f -name 'profile-switcher*.so' | head -n1 || true)
+          echo "so=$SO"
+          if [ -z "$SO" ]; then
+            echo "No .so found under build_x86_64"; exit 1
+          fi
+          echo "SO=$SO" >> $GITHUB_OUTPUT
 
-      - name: Upload plugin folders (preferred)
+      - name: Package OBS layout
+        run: |
+          set -e
+          DIST=dist/profile-switcher-ubuntu
+          mkdir -p "$DIST/obs-plugins" "$DIST/data/obs-plugins/profile-switcher/locale"
+          cp "${{ steps.findso.outputs.SO }}" "$DIST/obs-plugins/profile-switcher.so"
+          # include locale if present in repo
+          if [ -f data/locale/en-US.ini ]; then
+            cp data/locale/en-US.ini "$DIST/data/obs-plugins/profile-switcher/locale/en-US.ini"
+          fi
+          (cd dist && zip -r ../profile-switcher-ubuntu.zip profile-switcher-ubuntu)
+          ls -R dist || true
+
+      - name: Upload plugin ZIP (ready to copy into OBS)
         uses: actions/upload-artifact@v4
         with:
-          name: profile-switcher-ubuntu
-          path: |
-            build_x86_64/**/rundir/**/obs-plugins/**
-            build_x86_64/**/rundir/**/data/obs-plugins/**
+          name: profile-switcher-ubuntu-zip
+          path: profile-switcher-ubuntu.zip
 
-      - name: Upload fallback (entire build dir)
+      - name: Upload builddir (fallback)
         if: always()
         uses: actions/upload-artifact@v4
         with:
