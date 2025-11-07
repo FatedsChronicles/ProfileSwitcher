@@ -8,10 +8,7 @@
 #include <QFormLayout>
 #include <QSpinBox>
 #include <QComboBox>
-#include <QLabel>
-#include <QMessageBox>
-#include <QHBoxLayout>
-#include <QVBoxLayout>
+#include <QCheckBox>
 
 class ProfileDockWidget : public QWidget {
 	Q_OBJECT
@@ -20,33 +17,31 @@ public:
 	void refreshProfiles();
 
 private slots:
-	// Profiles
 	void onSwitch();
 	void onCreate();
 	void onDuplicate();
 	void onRename();
 	void onDelete();
-
-	// Settings
-	void onLoadFromCurrent();          // load current profile -> form
-	void onApplyQuickSettings();       // apply form -> selected profile
+	void onApplyQuickSettings();
 
 private:
-	// UI: profile list + actions
+	// UI
 	QListWidget *listProfiles{};
 	QPushButton *btnSwitch{};
 	QPushButton *btnCreate{};
 	QPushButton *btnDuplicate{};
 	QPushButton *btnRename{};
 	QPushButton *btnDelete{};
-	QLineEdit   *editNewName{};
-	QLineEdit   *editRenameTo{};
+	QPushButton *btnApply{};
 
-	// UI: quick settings (limited)
+	// Create / Rename inputs
+	QLineEdit *editNewName{};
+	QLineEdit *editRenameTo{};
+
+	// Quick settings (limited)
 	// Stream
 	QLineEdit *editRtmpServer{};
 	QLineEdit *editStreamKey{};
-
 	// Video
 	QSpinBox  *spinBaseW{};
 	QSpinBox  *spinBaseH{};
@@ -54,22 +49,12 @@ private:
 	QSpinBox  *spinOutH{};
 	QSpinBox  *spinFpsNum{};
 	QSpinBox  *spinFpsDen{};
-
 	// Output
-	QComboBox *comboOutputMode{};  // "Simple" or "Advanced"
+	QComboBox *comboOutputMode{};
 	QLineEdit *editSimpleEncoder{};
-	QPushButton *btnLoad{};
-	QPushButton *btnApply{};
 
 	// Helpers
 	QString selectedProfile() const;
 	bool confirmDanger(const QString &title, const QString &text);
-
-	// Settings helpers
 	void loadCurrentSettingsIntoForm();
-	bool applySettingsToProfile(const QString &profileName);
-	static bool profileExists(const QString &name);
-
-	// Guards
-	bool outputsActiveWarn();
 };
