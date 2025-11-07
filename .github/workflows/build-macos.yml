@@ -12,34 +12,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1) Override repo presets so our dock requirements are enabled
-      - name: Write CMakeUserPresets.json
+      # Ensure ninja exists (Ninja Multi-Config simplifies Release/Debug)
+      - name: Install Ninja
         run: |
-          cat > CMakeUserPresets.json << 'EOF'
-          {
-            "version": 4,
-            "configurePresets": [
-              {
-                "name": "macos-ci-universal",
-                "inherits": "macos-ci-universal",
-                "cacheVariables": {
-                  "ENABLE_FRONTEND_API": "ON",
-                  "ENABLE_QT": "ON"
-                }
-              }
-            ]
-          }
-          EOF
+          brew update
+          brew install ninja || true
 
-      # 2) Ensure helper script is executable
-      - name: Make scripts executable
-        run: chmod +x .github/scripts/build-macos
+      # Configure (Ninja Multi-Config); no presets/scripts
+      - name: CMake Configure (Ninja Multi-Config)
+        run: |
+          cmake -S . -B build -G "Ninja Multi-Config" \
+            -DENABLE_FRONTEND_API=ON \
+            -DENABLE_QT=ON
 
-      # 3) Build via the template script (uses preset macos-ci-universal)
-      - name: Build via template script
-        run: .github/scripts/build-macos
+      - name: CMake Build (Release)
+        run: cmake --build build --config Release --verbose
 
-      # 4) Upload artifacts
+      - name: Show rundir
+        run: |
+          echo "Listing build output:"
+          ls -R build || true
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -47,3 +40,4 @@ jobs:
           path: |
             build/**/rundir/**/obs-plugins/**
             build/**/rundir/**/data/obs-plugins/**
+          if-no-files-found: warn

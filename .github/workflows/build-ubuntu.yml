@@ -12,43 +12,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1) Ensure zsh exists (template script uses zsh shebang)
-      - name: Install zsh
+      # Basic build tools
+      - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y zsh
+          sudo apt-get install -y ninja-build pkg-config
 
-      # 2) Create a CMakeUserPresets.json that overrides repo presets:
-      #    - ENABLE_FRONTEND_API=ON
-      #    - ENABLE_QT=ON
-      - name: Write CMakeUserPresets.json
+      # Configure (no presets, no repo scripts)
+      - name: CMake Configure
         run: |
-          cat > CMakeUserPresets.json << 'EOF'
-          {
-            "version": 4,
-            "configurePresets": [
-              {
-                "name": "ubuntu-ci",
-                "inherits": "ubuntu-ci",
-                "cacheVariables": {
-                  "ENABLE_FRONTEND_API": "ON",
-                  "ENABLE_QT": "ON"
-                }
-              }
-            ]
-          }
-          EOF
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_FRONTEND_API=ON \
+            -DENABLE_QT=ON
 
-      # 3) Make repo helper script executable (template path)
-      - name: Make scripts executable
+      - name: CMake Build
+        run: cmake --build build --config Release -- -v
+
+      - name: Show rundir (if present)
         run: |
-          chmod +x .github/scripts/build-ubuntu
+          echo "Listing build output:"
+          ls -R build || true
 
-      # 4) Build via the template script (it uses the preset; our user preset overrides)
-      - name: Build via template script
-        run: .github/scripts/build-ubuntu
-
-      # 5) Upload artifacts (plugin binary + data folder if present)
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -56,3 +41,4 @@ jobs:
           path: |
             build/**/rundir/**/obs-plugins/**
             build/**/rundir/**/data/obs-plugins/**
+          if-no-files-found: warn
