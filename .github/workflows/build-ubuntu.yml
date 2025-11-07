@@ -1,0 +1,27 @@
+name: Build (Ubuntu)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Make scripts executable
+        run: chmod +x .github/scripts/build-ubuntu
+
+      - name: Build via template script
+        run: .github/scripts/build-ubuntu
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: profile-switcher-ubuntu
+          path: |
+            build/**/rundir/**/obs-plugins/**
+            build/**/rundir/**/data/obs-plugins/**
