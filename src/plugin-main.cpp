@@ -1,15 +1,20 @@
 #include <obs-module.h>
 #include <obs-frontend-api.h>
 #include <QWidget>
+
 #include "log.hpp"
 #include "profile_dock.hpp"
+
+#ifndef PLUGIN_VERSION_STR
+#define PLUGIN_VERSION_STR "1.0.2-quicksettings"
+#endif
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE("profile-switcher", "en-US")
 
 static ProfileDockWidget *g_dockWidget = nullptr;
-static const char *kDockId = "profile-switcher-dock";
-static const char *kDockTitle = "Profile Switcher";
+static const char *kDockId    = "profile-switcher-dock";
+static const char *kDockTitle = "Profile Switcher — QS 1.0.2";
 
 const char *obs_module_description(void)
 {
@@ -38,7 +43,8 @@ bool obs_module_load(void)
 		}
 	}, nullptr);
 
-	PLOG(LOG_INFO, "ProfileSwitcher loaded (requires OBS >= %d)", PLUGIN_MIN_OBS_MAJOR);
+	PLOG(LOG_INFO, "ProfileSwitcher loaded: %s (requires OBS >= %d)",
+	     PLUGIN_VERSION_STR, PLUGIN_MIN_OBS_MAJOR);
 	return true;
 }
 
@@ -49,5 +55,5 @@ void obs_module_unload(void)
 		delete g_dockWidget;
 		g_dockWidget = nullptr;
 	}
-	PLOG(LOG_INFO, "ProfileSwitcher unloaded");
+	PLOG(LOG_INFO, "ProfileSwitcher unloaded: %s", PLUGIN_VERSION_STR);
 }
