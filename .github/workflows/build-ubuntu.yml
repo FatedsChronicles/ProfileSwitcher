@@ -17,11 +17,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y zsh
 
-      # Turn ON frontend + Qt in CMakePresets.json (template -> ENABLE_* = true)
-      - name: Patch CMakePresets.json
+      - name: Patch CMakePresets.json (enable frontend + Qt)
         run: |
           python3 - <<'PY'
-          import json,sys
+          import json
           p='CMakePresets.json'
           j=json.load(open(p,'r',encoding='utf-8'))
           for cp in j.get('configurePresets',[]):
@@ -31,7 +30,6 @@ jobs:
               cv['ENABLE_QT']=True
           open(p,'w',encoding='utf-8').write(json.dumps(j,indent=2))
           PY
-          cat CMakePresets.json
 
       - name: Make script executable
         run: chmod +x .github/scripts/build-ubuntu
@@ -39,18 +37,27 @@ jobs:
       - name: Build via template script
         run: .github/scripts/build-ubuntu
 
-      # Some templates only create the runtree on install; run install to be safe
-      - name: CMake install (if needed)
+      - name: Install (ensure rundir exists)
         run: |
           if [ -d build_x86_64 ]; then cmake --install build_x86_64 --config RelWithDebInfo || true; fi
 
-      - name: Upload artifact
+      - name: List outputs
+        run: |
+          echo "==== build_x86_64 tree ===="
+          (command -v tree >/dev/null || sudo apt-get install -y tree) && tree -a build_x86_64 || find build_x86_64 -maxdepth 4 -type f | sort
+
+      - name: Upload plugin folders (preferred)
         uses: actions/upload-artifact@v4
         with:
           name: profile-switcher-ubuntu
           path: |
             build_x86_64/**/rundir/**/obs-plugins/**
             build_x86_64/**/rundir/**/data/obs-plugins/**
-            build/**/rundir/**/obs-plugins/**
-            build/**/rundir/**/data/obs-plugins/**
+
+      - name: Upload fallback (entire build dir)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: profile-switcher-ubuntu-builddir
+          path: build_x86_64
           if-no-files-found: warn

@@ -12,11 +12,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Patch Presets: set ENABLE_* true (macOS script expects Xcode generator)
-      - name: Patch CMakePresets.json
+      - name: Patch CMakePresets.json (enable frontend + Qt)
         run: |
           python3 - <<'PY'
-          import json,sys
+          import json
           p='CMakePresets.json'
           j=json.load(open(p,'r',encoding='utf-8'))
           for cp in j.get('configurePresets',[]):
@@ -26,7 +25,6 @@ jobs:
               cv['ENABLE_QT']=True
           open(p,'w',encoding='utf-8').write(json.dumps(j,indent=2))
           PY
-          cat CMakePresets.json
 
       - name: Make script executable
         run: chmod +x .github/scripts/build-macos
@@ -34,17 +32,27 @@ jobs:
       - name: Build via template script
         run: .github/scripts/build-macos
 
-      - name: CMake install (if needed)
+      - name: Install (ensure rundir exists)
         run: |
           if [ -d build_macos ]; then cmake --install build_macos --config RelWithDebInfo || true; fi
 
-      - name: Upload artifact
+      - name: List outputs
+        run: |
+          echo "==== build_macos tree ===="
+          (command -v tree >/dev/null || brew install tree) && tree -a build_macos || find build_macos -maxdepth 4 -type f | sort
+
+      - name: Upload plugin folders (preferred)
         uses: actions/upload-artifact@v4
         with:
           name: profile-switcher-macos
           path: |
             build_macos/**/rundir/**/obs-plugins/**
             build_macos/**/rundir/**/data/obs-plugins/**
-            build/**/rundir/**/obs-plugins/**
-            build/**/rundir/**/data/obs-plugins/**
+
+      - name: Upload fallback (entire build dir)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: profile-switcher-macos-builddir
+          path: build_macos
           if-no-files-found: warn

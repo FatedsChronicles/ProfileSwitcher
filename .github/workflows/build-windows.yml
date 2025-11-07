@@ -28,8 +28,7 @@ jobs:
           "SDK=$highest" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           Write-Host "Detected SDK: $highest"
 
-      # Patch Presets: set ENABLE_* true and fix windows-x64.architecture SDK version
-      - name: Patch CMakePresets.json
+      - name: Patch CMakePresets.json (enable frontend+Qt; fix SDK entry)
         shell: pwsh
         run: |
           $p = 'CMakePresets.json'
@@ -45,24 +44,34 @@ jobs:
             }
           }
           $j | ConvertTo-Json -Depth 10 | Out-File -FilePath $p -Encoding utf8
-          Get-Content $p
 
       - name: Build via template script
         shell: pwsh
         run: ./.github/scripts/Build-Windows.ps1 -Configuration RelWithDebInfo
 
-      - name: CMake install (if needed)
+      - name: Install (ensure rundir exists)
         shell: pwsh
         run: |
           if (Test-Path build_x64) { cmake --install build_x64 --config RelWithDebInfo }
 
-      - name: Upload artifact
+      - name: List outputs
+        shell: pwsh
+        run: |
+          Write-Host "==== build_x64 tree ===="
+          Get-ChildItem -Recurse -Force build_x64 | ForEach-Object { $_.FullName }
+
+      - name: Upload plugin folders (preferred)
         uses: actions/upload-artifact@v4
         with:
           name: profile-switcher-windows
           path: |
             build_x64/**/rundir/**/obs-plugins/**
             build_x64/**/rundir/**/data/obs-plugins/**
-            build/**/rundir/**/obs-plugins/**
-            build/**/rundir/**/data/obs-plugins/**
+
+      - name: Upload fallback (entire build dir)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: profile-switcher-windows-builddir
+          path: build_x64
           if-no-files-found: warn
