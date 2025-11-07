@@ -1,0 +1,152 @@
+name: Build (All Platforms)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Ensure Frontend + Qt always enabled
+      - name: Patch CMakePresets.json (enable frontend + qt)
+        run: |
+          python3 - <<'PY'
+          import json
+          p='CMakePresets.json'
+          j=json.load(open(p))
+          for cp in j.get('configurePresets', []):
+            if cp.get('name') == 'template':
+              cv = cp.setdefault('cacheVariables', {})
+              cv['ENABLE_FRONTEND_API'] = True
+              cv['ENABLE_QT'] = True
+          open(p, 'w').write(json.dumps(j, indent=2))
+          PY
+
+      # -------------------------------------------------
+      # Ubuntu
+      # -------------------------------------------------
+      - name: Ubuntu | Install deps
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zsh zip qtbase5-dev qtbase5-private-dev
+
+      - name: Ubuntu | Build
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          chmod +x .github/scripts/build-ubuntu
+          .github/scripts/build-ubuntu
+
+      - name: Ubuntu | Install plugin
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cmake --install build_x86_64 --config RelWithDebInfo || true
+
+      - name: Ubuntu | Package ZIP
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          set -e
+          DIST=dist/profile-switcher-ubuntu
+          mkdir -p "$DIST/usr/lib/obs-plugins" "$DIST/usr/share/obs/obs-plugins/profile-switcher/locale"
+          find build_x86_64 -type f -name 'profile-switcher*.so' -exec cp {} "$DIST/usr/lib/obs-plugins/" \;
+          cp data/locale/en-US.ini "$DIST/usr/share/obs/obs-plugins/profile-switcher/locale/" || true
+          (cd dist && zip -r ../profile-switcher-ubuntu.zip profile-switcher-ubuntu)
+      - name: Ubuntu | Upload artifact
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: profile-switcher-ubuntu
+          path: profile-switcher-ubuntu.zip
+
+      # -------------------------------------------------
+      # Windows
+      # -------------------------------------------------
+      - name: Windows | Prepare
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
+      - name: Windows | Detect SDK version
+        if: matrix.os == 'windows-latest'
+        id: sdk
+        shell: pwsh
+        run: |
+          $sdkRoot = 'C:\Program Files (x86)\Windows Kits\10\Lib'
+          $versions = Get-ChildItem $sdkRoot -Directory | Select-Object -ExpandProperty Name
+          $latest = ($versions | Sort-Object {[version]$_} -Descending | Select-Object -First 1)
+          "SDK=$latest" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "Using SDK $latest"
+
+      - name: Windows | Build
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: ./.github/scripts/Build-Windows.ps1 -Configuration RelWithDebInfo
+
+      - name: Windows | Install
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          if (Test-Path build_x64) { cmake --install build_x64 --config RelWithDebInfo }
+
+      - name: Windows | Package ZIP
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $Dist = "dist\profile-switcher-windows"
+          New-Item -ItemType Directory -Force -Path "$Dist\obs-plugins\64bit" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$Dist\data\obs-plugins\profile-switcher\locale" | Out-Null
+          $dll = Get-ChildItem -Recurse -Filter 'profile-switcher*.dll' build_x64 | Select-Object -First 1
+          Copy-Item $dll.FullName "$Dist\obs-plugins\64bit\profile-switcher.dll"
+          if (Test-Path "data\locale\en-US.ini") {
+            Copy-Item "data\locale\en-US.ini" "$Dist\data\obs-plugins\profile-switcher\locale\en-US.ini"
+          }
+          Compress-Archive -Path "dist\profile-switcher-windows\*" -DestinationPath "profile-switcher-windows.zip" -Force
+      - name: Windows | Upload artifact
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: profile-switcher-windows
+          path: profile-switcher-windows.zip
+
+      # -------------------------------------------------
+      # macOS
+      # -------------------------------------------------
+      - name: macOS | Build
+        if: matrix.os == 'macos-latest'
+        run: |
+          chmod +x .github/scripts/build-macos
+          .github/scripts/build-macos
+
+      - name: macOS | Install
+        if: matrix.os == 'macos-latest'
+        run: |
+          cmake --install build_macos --config RelWithDebInfo || true
+
+      - name: macOS | Package ZIP
+        if: matrix.os == 'macos-latest'
+        run: |
+          set -e
+          DIST=dist/profile-switcher-macos
+          mkdir -p "$DIST/obs-plugins" "$DIST/data/obs-plugins/profile-switcher/locale"
+          find build_macos -type f -name 'profile-switcher*.so' -exec cp {} "$DIST/obs-plugins/" \; || true
+          find build_macos -type d -name 'profile-switcher*.plugin' -exec cp -R {} "$DIST/obs-plugins/" \; || true
+          cp data/locale/en-US.ini "$DIST/data/obs-plugins/profile-switcher/locale/" || true
+          (cd dist && zip -r ../profile-switcher-macos.zip profile-switcher-macos)
+      - name: macOS | Upload artifact
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: profile-switcher-macos
+          path: profile-switcher-macos.zip
