@@ -12,32 +12,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Ensure ninja exists (Ninja Multi-Config simplifies Release/Debug)
-      - name: Install Ninja
+      # Patch Presets: set ENABLE_* true (macOS script expects Xcode generator)
+      - name: Patch CMakePresets.json
         run: |
-          brew update
-          brew install ninja || true
+          python3 - <<'PY'
+          import json,sys
+          p='CMakePresets.json'
+          j=json.load(open(p,'r',encoding='utf-8'))
+          for cp in j.get('configurePresets',[]):
+            if cp.get('name')=='template':
+              cv=cp.setdefault('cacheVariables',{})
+              cv['ENABLE_FRONTEND_API']=True
+              cv['ENABLE_QT']=True
+          open(p,'w',encoding='utf-8').write(json.dumps(j,indent=2))
+          PY
+          cat CMakePresets.json
 
-      # Configure (Ninja Multi-Config); no presets/scripts
-      - name: CMake Configure (Ninja Multi-Config)
+      - name: Make script executable
+        run: chmod +x .github/scripts/build-macos
+
+      - name: Build via template script
+        run: .github/scripts/build-macos
+
+      - name: CMake install (if needed)
         run: |
-          cmake -S . -B build -G "Ninja Multi-Config" \
-            -DENABLE_FRONTEND_API=ON \
-            -DENABLE_QT=ON
-
-      - name: CMake Build (Release)
-        run: cmake --build build --config Release --verbose
-
-      - name: Show rundir
-        run: |
-          echo "Listing build output:"
-          ls -R build || true
+          if [ -d build_macos ]; then cmake --install build_macos --config RelWithDebInfo || true; fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: profile-switcher-macos
           path: |
+            build_macos/**/rundir/**/obs-plugins/**
+            build_macos/**/rundir/**/data/obs-plugins/**
             build/**/rundir/**/obs-plugins/**
             build/**/rundir/**/data/obs-plugins/**
           if-no-files-found: warn

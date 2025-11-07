@@ -44,7 +44,7 @@ ProfileDockWidget::ProfileDockWidget(QWidget *parent) : QWidget(parent)
 
 	// --- Quick settings group
 	auto *grp = new QGroupBox(tr("Quick Settings (Stream, Video, Output)"), this);
-	auto *form = new QFormLayout(grp);
+	auto *form = new QFormLayout();
 
 	// Stream (optional)
 	editRtmpServer = new QLineEdit(grp); editRtmpServer->setPlaceholderText("rtmp://live.twitch.tv/app");
@@ -59,18 +59,24 @@ ProfileDockWidget::ProfileDockWidget(QWidget *parent) : QWidget(parent)
 	spinOutH  = new QSpinBox(grp);  spinOutH->setRange(16, 16384);  spinOutH->setValue(1080);
 	spinFpsNum= new QSpinBox(grp);  spinFpsNum->setRange(1, 1000);  spinFpsNum->setValue(60);
 	spinFpsDen= new QSpinBox(grp);  spinFpsDen->setRange(1, 1000);  spinFpsDen->setValue(1);
+
 	auto *videoRow1 = new QHBoxLayout();
 	videoRow1->addWidget(new QLabel("Base:"));  videoRow1->addWidget(spinBaseW); videoRow1->addWidget(new QLabel("x")); videoRow1->addWidget(spinBaseH);
 	videoRow1->addSpacing(8);
 	videoRow1->addWidget(new QLabel("Output:")); videoRow1->addWidget(spinOutW); videoRow1->addWidget(new QLabel("x")); videoRow1->addWidget(spinOutH);
-	form->addRow(new QLabel(tr("Resolution:")), new QWidget(grp)); // spacer
-	form->setLayout( form->rowCount()-1, QFormLayout::FieldRole, videoRow1 );
+
+	auto *videoField = new QWidget(grp);
+	videoField->setLayout(videoRow1);
+	form->addRow(new QLabel(tr("Resolution:")), videoField);
+
 	auto *fpsRow = new QHBoxLayout();
 	fpsRow->addWidget(new QLabel("Num:")); fpsRow->addWidget(spinFpsNum);
 	fpsRow->addSpacing(8);
 	fpsRow->addWidget(new QLabel("Den:")); fpsRow->addWidget(spinFpsDen);
-	form->addRow(new QLabel(tr("FPS (num/den):")), new QWidget(grp));
-	form->setLayout(form->rowCount()-1, QFormLayout::FieldRole, fpsRow);
+
+	auto *fpsField = new QWidget(grp);
+	fpsField->setLayout(fpsRow);
+	form->addRow(new QLabel(tr("FPS (num/den):")), fpsField);
 
 	// Output
 	comboOutputMode = new QComboBox(grp);
@@ -83,6 +89,7 @@ ProfileDockWidget::ProfileDockWidget(QWidget *parent) : QWidget(parent)
 	auto *applyRow = new QHBoxLayout();
 	applyRow->addStretch();
 	applyRow->addWidget(btnApply);
+
 	auto *wrap = new QVBoxLayout();
 	wrap->addLayout(form);
 	wrap->addLayout(applyRow);

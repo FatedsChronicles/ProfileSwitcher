@@ -12,7 +12,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Detect highest installed Windows SDK and pass it to CMake
+      - name: Allow running repo scripts
+        shell: pwsh
+        run: Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
       - name: Detect Windows SDK
         id: winsdk
         shell: pwsh
@@ -22,34 +25,44 @@ jobs:
           $versions = Get-ChildItem $sdkRoot -Directory | Select-Object -ExpandProperty Name
           if (-not $versions) { throw "No SDK versions found in $sdkRoot" }
           $highest = ($versions | Sort-Object {[version]$_} -Descending | Select-Object -First 1)
-          "Detected SDK: $highest"
           "SDK=$highest" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "Detected SDK: $highest"
 
-      # Configure with MSVC generator, no presets/scripts
-      - name: CMake Configure (MSVC)
+      # Patch Presets: set ENABLE_* true and fix windows-x64.architecture SDK version
+      - name: Patch CMakePresets.json
         shell: pwsh
         run: |
-          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION=${{ steps.winsdk.outputs.SDK }} `
-            -DENABLE_FRONTEND_API=ON `
-            -DENABLE_QT=ON
+          $p = 'CMakePresets.json'
+          $j = Get-Content $p -Raw | ConvertFrom-Json
+          foreach ($cp in $j.configurePresets) {
+            if ($cp.name -eq 'template') {
+              if (-not $cp.cacheVariables) { $cp.cacheVariables = @{} }
+              $cp.cacheVariables.ENABLE_FRONTEND_API = $true
+              $cp.cacheVariables.ENABLE_QT = $true
+            }
+            if ($cp.name -eq 'windows-x64') {
+              $cp.architecture = "x64,version=${{ steps.winsdk.outputs.SDK }}"
+            }
+          }
+          $j | ConvertTo-Json -Depth 10 | Out-File -FilePath $p -Encoding utf8
+          Get-Content $p
 
-      - name: CMake Build (Release)
+      - name: Build via template script
         shell: pwsh
-        run: cmake --build build --config Release -- /m
+        run: ./.github/scripts/Build-Windows.ps1 -Configuration RelWithDebInfo
 
-      - name: Show rundir
+      - name: CMake install (if needed)
         shell: pwsh
         run: |
-          Write-Host "Listing build output:"
-          Get-ChildItem -Recurse build | Out-String -Width 4096
+          if (Test-Path build_x64) { cmake --install build_x64 --config RelWithDebInfo }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: profile-switcher-windows
           path: |
+            build_x64/**/rundir/**/obs-plugins/**
+            build_x64/**/rundir/**/data/obs-plugins/**
             build/**/rundir/**/obs-plugins/**
             build/**/rundir/**/data/obs-plugins/**
           if-no-files-found: warn

@@ -12,33 +12,45 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Basic build tools
-      - name: Install build tools
+      - name: Install zsh (template script uses zsh)
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build pkg-config
+          sudo apt-get install -y zsh
 
-      # Configure (no presets, no repo scripts)
-      - name: CMake Configure
+      # Turn ON frontend + Qt in CMakePresets.json (template -> ENABLE_* = true)
+      - name: Patch CMakePresets.json
         run: |
-          cmake -S . -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DENABLE_FRONTEND_API=ON \
-            -DENABLE_QT=ON
+          python3 - <<'PY'
+          import json,sys
+          p='CMakePresets.json'
+          j=json.load(open(p,'r',encoding='utf-8'))
+          for cp in j.get('configurePresets',[]):
+            if cp.get('name')=='template':
+              cv=cp.setdefault('cacheVariables',{})
+              cv['ENABLE_FRONTEND_API']=True
+              cv['ENABLE_QT']=True
+          open(p,'w',encoding='utf-8').write(json.dumps(j,indent=2))
+          PY
+          cat CMakePresets.json
 
-      - name: CMake Build
-        run: cmake --build build --config Release -- -v
+      - name: Make script executable
+        run: chmod +x .github/scripts/build-ubuntu
 
-      - name: Show rundir (if present)
+      - name: Build via template script
+        run: .github/scripts/build-ubuntu
+
+      # Some templates only create the runtree on install; run install to be safe
+      - name: CMake install (if needed)
         run: |
-          echo "Listing build output:"
-          ls -R build || true
+          if [ -d build_x86_64 ]; then cmake --install build_x86_64 --config RelWithDebInfo || true; fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: profile-switcher-ubuntu
           path: |
+            build_x86_64/**/rundir/**/obs-plugins/**
+            build_x86_64/**/rundir/**/data/obs-plugins/**
             build/**/rundir/**/obs-plugins/**
             build/**/rundir/**/data/obs-plugins/**
           if-no-files-found: warn
